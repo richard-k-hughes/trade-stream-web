@@ -6,22 +6,11 @@ import {
   FlowBlock,
   FlowTemplate,
   SessionBundle,
-  TemplateBlock,
   Takeaway,
   TradeDirection,
   TradeTaken,
   TradingSession,
 } from './types';
-
-export async function ensureStarterTemplates() {
-  const templates = starterTemplates();
-  await db.transaction('rw', db.templates, async () => {
-    const existing = await db.templates.toArray();
-    const existingNames = new Set(existing.filter((template) => template.isStarter).map((template) => template.name));
-    const missing = templates.filter((template) => !existingNames.has(template.name));
-    if (missing.length) await db.templates.bulkAdd(missing);
-  });
-}
 
 export async function createSession(): Promise<TradingSession> {
   const timestamp = nowIso();
@@ -248,15 +237,10 @@ export async function listTakeaways() {
 }
 
 export async function listTemplates() {
-  await ensureStarterTemplates();
   const records = await db.templates.orderBy('updatedAt').reverse().toArray();
-  const seenStarterNames = new Set<string>();
-  return records.map(normalizeTemplate).filter((template) => {
-    if (!template.isStarter) return true;
-    if (seenStarterNames.has(template.name)) return false;
-    seenStarterNames.add(template.name);
-    return true;
-  });
+  const starterIds = records.filter((template) => template.isStarter).map((template) => template.id);
+  if (starterIds.length) await db.templates.bulkDelete(starterIds);
+  return records.filter((template) => !template.isStarter).map(normalizeTemplate);
 }
 
 export async function saveTemplate(template: Omit<FlowTemplate, 'id' | 'createdAt' | 'updatedAt'>) {
@@ -335,24 +319,6 @@ export async function insertTemplateIntoSession(
   return blocks;
 }
 
-function makeTemplateBlock(
-  type: BlockType,
-  text: string,
-  orderIndex: number,
-  parentBlockId?: string,
-  branchGroupId?: string,
-): TemplateBlock {
-  return {
-    id: uid('tblock'),
-    parentBlockId,
-    branchGroupId,
-    childBlockIds: [],
-    type,
-    text,
-    orderIndex,
-  };
-}
-
 function normalizeFlowBlock(block: FlowBlock): FlowBlock {
   return {
     ...block,
@@ -390,102 +356,4 @@ function normalizeBlockStatus(status: BlockStatus): BlockStatus {
   return ['pending', 'selected', 'inactive', 'entryTaken', 'invalidated'].includes(status)
     ? status
     : 'pending';
-}
-
-function starterTemplates(): FlowTemplate[] {
-  const timestamp = nowIso();
-  const build = (name: string, blocks: ReturnType<typeof makeTemplateBlock>[]): FlowTemplate => ({
-    id: uid('template'),
-    name,
-    blocks,
-    createdAt: timestamp,
-    updatedAt: timestamp,
-    isStarter: true,
-  });
-
-  const longZone = makeTemplateBlock('zone', 'Key zone', 1);
-  const longEvent = makeTemplateBlock('event', 'Price tapped key zone and rejected strongly', 2, longZone.id);
-  const longGroup = uid('tbranch');
-  const longAsk = makeTemplateBlock(
-    'condition',
-    'Waiting for retracement back toward zone and ASK bubble for long',
-    3,
-    longEvent.id,
-    longGroup,
-  );
-  const longNoConfirm = makeTemplateBlock(
-    'invalidation',
-    'Price moves to next key zone without confirmation',
-    4,
-    longEvent.id,
-    longGroup,
-  );
-  const longCloseThrough = makeTemplateBlock(
-    'invalidation',
-    'Price returns to key zone and closes through',
-    5,
-    longEvent.id,
-    longGroup,
-  );
-  const longShort = makeTemplateBlock(
-    'condition',
-    'Waiting for retrace back up and BID bubble for short',
-    6,
-    longCloseThrough.id,
-  );
-  longZone.childBlockIds = [longEvent.id];
-  longEvent.childBlockIds = [longAsk.id, longNoConfirm.id, longCloseThrough.id];
-  longCloseThrough.childBlockIds = [longShort.id];
-
-  const shortZone = makeTemplateBlock('zone', 'Key zone', 1);
-  const shortEvent = makeTemplateBlock('event', 'Price tapped key zone and rejected lower', 2, shortZone.id);
-  const shortGroup = uid('tbranch');
-  const shortBid = makeTemplateBlock(
-    'condition',
-    'Waiting for retracement back toward zone and BID bubble for short',
-    3,
-    shortEvent.id,
-    shortGroup,
-  );
-  const shortNoConfirm = makeTemplateBlock(
-    'invalidation',
-    'Price moves to next key zone without confirmation',
-    4,
-    shortEvent.id,
-    shortGroup,
-  );
-  const shortReclaim = makeTemplateBlock('invalidation', 'Price reclaims and holds above the zone', 5, shortEvent.id, shortGroup);
-  shortZone.childBlockIds = [shortEvent.id];
-  shortEvent.childBlockIds = [shortBid.id, shortNoConfirm.id, shortReclaim.id];
-
-  const closeZone = makeTemplateBlock('zone', 'Key level', 1);
-  const closeEvent = makeTemplateBlock('event', 'Price closes through level with strength', 2, closeZone.id);
-  const closeCondition = makeTemplateBlock('condition', 'Waiting for retest and hold beyond level', 3, closeEvent.id);
-  const closeEntry = makeTemplateBlock('entry', 'Entry after retest confirms continuation', 4, closeCondition.id);
-  closeZone.childBlockIds = [closeEvent.id];
-  closeEvent.childBlockIds = [closeCondition.id];
-  closeCondition.childBlockIds = [closeEntry.id];
-
-  const failedZone = makeTemplateBlock('zone', 'Range edge', 1);
-  const failedEvent = makeTemplateBlock('event', 'Price breaks out and fails to continue', 2, failedZone.id);
-  const failedCondition = makeTemplateBlock('condition', 'Waiting for acceptance back inside range', 3, failedEvent.id);
-  const failedEntry = makeTemplateBlock('entry', 'Entry back toward range midpoint', 4, failedCondition.id);
-  failedZone.childBlockIds = [failedEvent.id];
-  failedEvent.childBlockIds = [failedCondition.id];
-  failedCondition.childBlockIds = [failedEntry.id];
-
-  const noTradeZone = makeTemplateBlock('zone', 'Decision zone', 1);
-  const noTradeGroup = uid('tbranch');
-  const noTradeA = makeTemplateBlock('invalidation', 'No bubble appears', 2, noTradeZone.id, noTradeGroup);
-  const noTradeB = makeTemplateBlock('invalidation', 'Price accepts beyond zone', 3, noTradeZone.id, noTradeGroup);
-  const noTradeC = makeTemplateBlock('entry', 'No trade', 4, noTradeZone.id, noTradeGroup);
-  noTradeZone.childBlockIds = [noTradeA.id, noTradeB.id, noTradeC.id];
-
-  return [
-    build('Long from key zone rejection', [longZone, longEvent, longAsk, longNoConfirm, longCloseThrough, longShort]),
-    build('Short from key zone rejection', [shortZone, shortEvent, shortBid, shortNoConfirm, shortReclaim]),
-    build('Close-through then retest', [closeZone, closeEvent, closeCondition, closeEntry]),
-    build('Failed breakout back into range', [failedZone, failedEvent, failedCondition, failedEntry]),
-    build('No-trade invalidation path', [noTradeZone, noTradeA, noTradeB, noTradeC]),
-  ];
 }

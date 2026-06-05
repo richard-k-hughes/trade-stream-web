@@ -306,14 +306,6 @@ function SessionPage() {
             />
           )}
 
-          {!locked && (
-            <TemplatePicker
-              sessionId={bundle.session.id}
-              activeParentId={activeParentId}
-              onInserted={async (blocks) => afterMutation(blocks[blocks.length - 1]?.id ?? activeParentId)}
-            />
-          )}
-
           <TradePanel
             session={bundle.session}
             blocks={bundle.blocks}
@@ -735,54 +727,6 @@ function AddBlockPanel({
           </button>
         </div>
       </div>
-    </section>
-  );
-}
-
-function TemplatePicker({
-  sessionId,
-  activeParentId,
-  onInserted,
-}: {
-  sessionId: string;
-  activeParentId?: string;
-  onInserted: (blocks: FlowBlock[]) => void;
-}) {
-  const [templates, setTemplates] = useState<FlowTemplate[]>([]);
-  const [selected, setSelected] = useState('');
-
-  useEffect(() => {
-    listTemplates().then((records) => {
-      setTemplates(records);
-      setSelected(records[0]?.id ?? '');
-    });
-  }, []);
-
-  const insert = async () => {
-    const template = templates.find((item) => item.id === selected);
-    if (!template) return;
-    const blocks = await insertTemplateIntoSession(sessionId, template, activeParentId);
-    onInserted(blocks);
-  };
-
-  return (
-    <section className="tool-panel">
-      <div className="section-heading compact-heading">
-        <h2>Templates</h2>
-        <Link to="/templates" className="text-link">
-          Manage
-        </Link>
-      </div>
-      <select value={selected} onChange={(event) => setSelected(event.target.value)}>
-        {templates.map((template) => (
-          <option value={template.id} key={template.id}>
-            {template.name}
-          </option>
-        ))}
-      </select>
-      <button className="button secondary full" onClick={insert}>
-        <BookOpen size={17} /> Insert Template
-      </button>
     </section>
   );
 }
