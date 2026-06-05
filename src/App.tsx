@@ -29,6 +29,7 @@ import {
   addTakeaway,
   addTrade,
   createSession,
+  deleteFlowBlock,
   getSessionBundle,
   listSessions,
   listTakeaways,
@@ -225,15 +226,22 @@ function SessionPage() {
     setBundle({ ...bundle, session });
   };
 
-  const afterMutation = async (nextActive?: string) => {
+  const afterMutation = async (nextActive?: string | null) => {
     await refresh();
-    if (nextActive !== undefined) setActiveParentId(nextActive);
+    if (nextActive !== undefined) setActiveParentId(nextActive ?? undefined);
   };
 
   const handleSave = async () => {
     if (!window.confirm('Save and lock this session? This will make it read-only.')) return;
     await lockSession(bundle.session.id);
     await afterMutation(activeParentId);
+  };
+
+  const handleDeleteBlock = async (blockId: string) => {
+    if (!window.confirm('Delete this block and every block branching from it?')) return;
+    const { deletedBlockIds, parentBlockId } = await deleteFlowBlock(blockId);
+    const nextActive = activeParentId && deletedBlockIds.includes(activeParentId) ? parentBlockId ?? null : activeParentId;
+    await afterMutation(nextActive);
   };
 
   return (
@@ -275,6 +283,7 @@ function SessionPage() {
               await updateFlowBlock(blockId, { text });
               await afterMutation(activeParentId);
             }}
+            onDeleteBlock={handleDeleteBlock}
           />
         </section>
 
@@ -372,6 +381,7 @@ function FlowDiagram({
   onSelectActive,
   onSelectBranch,
   onEditBlock,
+  onDeleteBlock,
 }: {
   blocks: FlowBlock[];
   branchGroups: BranchGroup[];
@@ -380,6 +390,7 @@ function FlowDiagram({
   onSelectActive: (blockId?: string) => void;
   onSelectBranch: (groupId: string, blockId: string) => void;
   onEditBlock: (blockId: string, text: string) => void;
+  onDeleteBlock: (blockId: string) => void;
 }) {
   const blockMap = useMemo(() => new Map(blocks.map((block) => [block.id, block])), [blocks]);
   const groupMap = useMemo(() => new Map(branchGroups.map((group) => [group.id, group])), [branchGroups]);
@@ -417,6 +428,7 @@ function FlowDiagram({
               onSelectActive={onSelectActive}
               onSelectBranch={onSelectBranch}
               onEditBlock={onEditBlock}
+              onDeleteBlock={onDeleteBlock}
             />
           ))}
         </div>
@@ -434,6 +446,7 @@ function FlowNode({
   onSelectActive,
   onSelectBranch,
   onEditBlock,
+  onDeleteBlock,
 }: {
   block: FlowBlock;
   blockMap: Map<string, FlowBlock>;
@@ -443,6 +456,7 @@ function FlowNode({
   onSelectActive: (blockId: string) => void;
   onSelectBranch: (groupId: string, blockId: string) => void;
   onEditBlock: (blockId: string, text: string) => void;
+  onDeleteBlock: (blockId: string) => void;
 }) {
   const children = block.childBlockIds.map((id) => blockMap.get(id)).filter(Boolean) as FlowBlock[];
   const renderedGroups = new Set<string>();
@@ -455,6 +469,7 @@ function FlowNode({
         locked={locked}
         onSelectActive={() => onSelectActive(block.id)}
         onEdit={(text) => onEditBlock(block.id, text)}
+        onDelete={() => onDeleteBlock(block.id)}
         onSelectBranch={block.branchGroupId ? () => onSelectBranch(block.branchGroupId!, block.id) : undefined}
         branchSelected={block.branchGroupId ? groupMap.get(block.branchGroupId)?.selectedBranchId === block.id : false}
       />
@@ -485,6 +500,7 @@ function FlowNode({
                         onSelectActive={onSelectActive}
                         onSelectBranch={onSelectBranch}
                         onEditBlock={onEditBlock}
+                        onDeleteBlock={onDeleteBlock}
                       />
                     ))}
                   </div>
@@ -502,6 +518,7 @@ function FlowNode({
                 onSelectActive={onSelectActive}
                 onSelectBranch={onSelectBranch}
                 onEditBlock={onEditBlock}
+                onDeleteBlock={onDeleteBlock}
               />
             );
           })}
@@ -519,6 +536,7 @@ function FlowBlockCard({
   onSelectActive,
   onSelectBranch,
   onEdit,
+  onDelete,
 }: {
   block: FlowBlock;
   active: boolean;
@@ -527,6 +545,7 @@ function FlowBlockCard({
   onSelectActive: () => void;
   onSelectBranch?: () => void;
   onEdit: (text: string) => void;
+  onDelete: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(block.text);
@@ -543,7 +562,20 @@ function FlowBlockCard({
         <span className="type-label">
           <Icon size={16} /> {blockTypeLabels[block.type]}
         </span>
-        <span className="small-pill">{blockStatusLabels[block.status]}</span>
+        <div className="flow-card-meta">
+          <span className="small-pill">{blockStatusLabels[block.status]}</span>
+          {!locked && (
+            <button
+              className="icon-button danger"
+              type="button"
+              onClick={onDelete}
+              aria-label={`Delete ${blockTypeLabels[block.type]} block`}
+              title="Delete block"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
+        </div>
       </div>
       {editing ? (
         <form

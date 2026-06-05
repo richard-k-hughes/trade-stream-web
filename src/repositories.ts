@@ -110,6 +110,108 @@ export async function updateFlowBlock(blockId: string, patch: Partial<FlowBlock>
   await db.flowBlocks.update(blockId, patch);
 }
 
+export async function deleteFlowBlock(blockId: string) {
+  const timestamp = nowIso();
+
+  return db.transaction('rw', db.flowBlocks, db.branchGroups, db.trades, db.sessions, async () => {
+    const target = await db.flowBlocks.get(blockId);
+    if (!target) return { deletedBlockIds: [] as string[], parentBlockId: undefined };
+
+    const [blocks, branchGroups] = await Promise.all([
+      db.flowBlocks.where('sessionId').equals(target.sessionId).toArray(),
+      db.branchGroups.where('sessionId').equals(target.sessionId).toArray(),
+    ]);
+    const blockMap = new Map(blocks.map((block) => [block.id, normalizeFlowBlock(block)]));
+    const childrenByParent = new Map<string, string[]>();
+    const branchGroupsByParent = new Map<string, BranchGroup[]>();
+
+    blocks.forEach((block) => {
+      if (!block.parentBlockId) return;
+      childrenByParent.set(block.parentBlockId, [...(childrenByParent.get(block.parentBlockId) ?? []), block.id]);
+    });
+
+    branchGroups.forEach((group) => {
+      if (!group.parentBlockId) return;
+      branchGroupsByParent.set(group.parentBlockId, [...(branchGroupsByParent.get(group.parentBlockId) ?? []), group]);
+    });
+
+    const deletedBlockIds = new Set<string>();
+    const stack = [blockId];
+    while (stack.length > 0) {
+      const currentId = stack.pop();
+      if (!currentId || deletedBlockIds.has(currentId)) continue;
+      deletedBlockIds.add(currentId);
+
+      const current = blockMap.get(currentId);
+      current?.childBlockIds.forEach((childId) => stack.push(childId));
+      childrenByParent.get(currentId)?.forEach((childId) => stack.push(childId));
+      branchGroupsByParent.get(currentId)?.forEach((group) => {
+        group.branchBlockIds.forEach((branchBlockId) => stack.push(branchBlockId));
+      });
+    }
+
+    const ids = Array.from(deletedBlockIds);
+    const groupIdsToDelete: string[] = [];
+    const branchGroupsNeedingSelectionReset: string[][] = [];
+    const branchGroupUpdates: Array<{ id: string; patch: Partial<BranchGroup> }> = [];
+
+    branchGroups.forEach((group) => {
+      const survivingBranchBlockIds = group.branchBlockIds.filter((branchBlockId) => !deletedBlockIds.has(branchBlockId));
+      const parentWasDeleted = group.parentBlockId ? deletedBlockIds.has(group.parentBlockId) : false;
+
+      if (parentWasDeleted || survivingBranchBlockIds.length === 0) {
+        groupIdsToDelete.push(group.id);
+        return;
+      }
+
+      const selectedBranchWasDeleted = group.selectedBranchId ? deletedBlockIds.has(group.selectedBranchId) : false;
+      if (survivingBranchBlockIds.length !== group.branchBlockIds.length || selectedBranchWasDeleted) {
+        branchGroupUpdates.push({
+          id: group.id,
+          patch: {
+            branchBlockIds: survivingBranchBlockIds,
+            selectedBranchId: selectedBranchWasDeleted ? undefined : group.selectedBranchId,
+          },
+        });
+      }
+
+      if (selectedBranchWasDeleted) {
+        branchGroupsNeedingSelectionReset.push(survivingBranchBlockIds);
+      }
+    });
+
+    const parentUpdates = blocks
+      .filter((block) => !deletedBlockIds.has(block.id))
+      .map((block) => {
+        const normalizedBlock = normalizeFlowBlock(block);
+        const childBlockIds = normalizedBlock.childBlockIds.filter((childId) => !deletedBlockIds.has(childId));
+        return childBlockIds.length === normalizedBlock.childBlockIds.length
+          ? undefined
+          : db.flowBlocks.update(block.id, { childBlockIds });
+      })
+      .filter(Boolean);
+
+    await Promise.all(parentUpdates);
+    await Promise.all(branchGroupUpdates.map((group) => db.branchGroups.update(group.id, group.patch)));
+    await Promise.all(
+      branchGroupsNeedingSelectionReset
+        .flat()
+        .map((branchBlockId) => db.flowBlocks.update(branchBlockId, { status: 'pending', selectedAt: undefined })),
+    );
+    await db.branchGroups.bulkDelete(groupIdsToDelete);
+    await db.flowBlocks.bulkDelete(ids);
+    await db.trades
+      .where('relatedFlowBlockId')
+      .anyOf(ids)
+      .modify((trade) => {
+        delete trade.relatedFlowBlockId;
+      });
+    await db.sessions.update(target.sessionId, { updatedAt: timestamp });
+
+    return { deletedBlockIds: ids, parentBlockId: target.parentBlockId };
+  });
+}
+
 export async function addBranchGroup(input: {
   sessionId: string;
   parentBlockId?: string;
