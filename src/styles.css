@@ -202,6 +202,13 @@ a {
   white-space: nowrap;
 }
 
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
 .status-pill.active {
   background: #e7f8ee;
   color: #22613d;
@@ -240,6 +247,7 @@ a {
 
 .session-card-header {
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
 }
@@ -612,11 +620,47 @@ select:focus {
   display: none;
 }
 
+.trade-panel .review-list {
+  margin-top: 14px;
+}
+
 .review-item {
   border: 1px solid #e1e7ef;
   border-radius: 8px;
   background: #fbfcfe;
   padding: 10px;
+}
+
+.review-item.outcome-smallLoss {
+  background: #fff8ed;
+  border-color: #f1c58f;
+}
+
+.review-item.outcome-loss {
+  background: #fff1f0;
+  border-color: #eba098;
+}
+
+.review-item.outcome-breakeven {
+  background: #f6f8fb;
+  border-color: #c7d2e1;
+}
+
+.review-item.outcome-smallWin {
+  background: #f2fbf5;
+  border-color: #a5d8b4;
+}
+
+.review-item.outcome-win {
+  background: #eaf8ee;
+  border-color: #79c890;
+}
+
+.review-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .review-item strong {
@@ -631,6 +675,14 @@ select:focus {
 .review-item p {
   margin: 6px 0 0;
   white-space: pre-wrap;
+}
+
+.outcome-select {
+  width: auto;
+  min-width: 132px;
+  padding: 6px 8px;
+  font-size: 0.86rem;
+  font-weight: 800;
 }
 
 .takeaway-panel {
@@ -731,6 +783,15 @@ select:focus {
 
   .branch-row {
     grid-template-columns: 1fr;
+  }
+
+  .review-item-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .outcome-select {
+    width: 100%;
   }
 }
 

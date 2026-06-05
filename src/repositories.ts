@@ -7,6 +7,7 @@ import {
   SessionBundle,
   Takeaway,
   TradeDirection,
+  TradeOutcome,
   TradeTaken,
   TradingSession,
 } from './types';
@@ -309,6 +310,16 @@ export async function addTrade(input: {
     await db.sessions.update(input.sessionId, { updatedAt: timestamp });
   });
   return trade;
+}
+
+export async function updateTradeOutcome(tradeId: string, outcome: TradeOutcome) {
+  const timestamp = nowIso();
+  await db.transaction('rw', db.trades, db.sessions, async () => {
+    const trade = await db.trades.get(tradeId);
+    if (!trade) return;
+    await db.trades.update(tradeId, { outcome });
+    await db.sessions.update(trade.sessionId, { updatedAt: timestamp });
+  });
 }
 
 export async function addTakeaway(input: {

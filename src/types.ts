@@ -15,6 +15,13 @@ export type BlockStatus =
 
 export type TradeDirection = 'long' | 'short';
 
+export type TradeOutcome =
+  | 'smallLoss'
+  | 'loss'
+  | 'breakeven'
+  | 'smallWin'
+  | 'win';
+
 export interface TradingSession {
   id: string;
   dateCreated: string;
@@ -53,6 +60,7 @@ export interface TradeTaken {
   sessionId: string;
   relatedFlowBlockId?: string;
   direction: TradeDirection;
+  outcome?: TradeOutcome;
   notes: string;
   createdAt: string;
 }
@@ -99,4 +107,20 @@ export const blockStatusLabels: Record<BlockStatus, string> = {
   inactive: 'Grayed out',
   entryTaken: 'Entry taken',
   invalidated: 'Invalidated',
+};
+
+export const tradeOutcomeOptions: TradeOutcome[] = [
+  'loss',
+  'smallLoss',
+  'breakeven',
+  'smallWin',
+  'win',
+];
+
+export const tradeOutcomeLabels: Record<TradeOutcome, string> = {
+  smallLoss: 'Small Loss',
+  loss: 'Loss',
+  breakeven: 'Breakeven',
+  smallWin: 'Small Win',
+  win: 'Win',
 };

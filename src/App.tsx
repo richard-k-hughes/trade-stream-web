@@ -37,6 +37,7 @@ import {
   selectBranch,
   updateFlowBlock,
   updateSession,
+  updateTradeOutcome,
 } from './repositories';
 import {
   BlockType,
@@ -45,10 +46,13 @@ import {
   ScreenshotAttachment,
   SessionBundle,
   Takeaway,
+  TradeOutcome,
   TradeTaken,
   TradingSession,
   blockStatusLabels,
   blockTypeLabels,
+  tradeOutcomeLabels,
+  tradeOutcomeOptions,
 } from './types';
 
 const blockTextPresets: Record<BlockType, string[]> = {
@@ -311,6 +315,10 @@ function SessionPage() {
             screenshots={bundle.screenshots}
             locked={locked}
             onAdded={() => afterMutation(activeParentId)}
+            onTradeOutcomeChange={async (tradeId, outcome) => {
+              await updateTradeOutcome(tradeId, outcome);
+              await afterMutation(activeParentId);
+            }}
           />
 
           <TakeawayPanel
@@ -555,6 +563,7 @@ function FlowBlockCard({
 
   const canSelectBranch = !locked && onSelectBranch && block.status === 'pending';
   const canMakeActive = !locked && block.status !== 'inactive';
+  const showStatusLabel = Boolean(block.branchGroupId);
 
   return (
     <article className={`flow-card type-${block.type} status-${block.status} ${active ? 'active-card' : ''}`}>
@@ -563,7 +572,7 @@ function FlowBlockCard({
           <Icon size={16} /> {blockTypeLabels[block.type]}
         </span>
         <div className="flow-card-meta">
-          <span className="small-pill">{blockStatusLabels[block.status]}</span>
+          {showStatusLabel && <span className="small-pill">{blockStatusLabels[block.status]}</span>}
           {!locked && (
             <button
               className="icon-button danger"
@@ -759,6 +768,7 @@ function TradePanel({
   screenshots,
   locked,
   onAdded,
+  onTradeOutcomeChange,
 }: {
   session: TradingSession;
   blocks: FlowBlock[];
@@ -766,6 +776,7 @@ function TradePanel({
   screenshots: ScreenshotAttachment[];
   locked: boolean;
   onAdded: () => void;
+  onTradeOutcomeChange: (tradeId: string, outcome: TradeOutcome) => void;
 }) {
   const [direction, setDirection] = useState<'long' | 'short'>('long');
   const [notes, setNotes] = useState('');
@@ -830,7 +841,13 @@ function TradePanel({
       )}
       <div className="review-list">
         {trades.map((trade) => (
-          <TradeReview key={trade.id} trade={trade} screenshots={screenshots.filter((shot) => shot.tradeId === trade.id)} />
+          <TradeReview
+            key={trade.id}
+            trade={trade}
+            screenshots={screenshots.filter((shot) => shot.tradeId === trade.id)}
+            locked={locked}
+            onOutcomeChange={onTradeOutcomeChange}
+          />
         ))}
         {trades.length === 0 && <p className="muted">No trades recorded.</p>}
       </div>
@@ -838,11 +855,41 @@ function TradePanel({
   );
 }
 
-function TradeReview({ trade, screenshots }: { trade: TradeTaken; screenshots: ScreenshotAttachment[] }) {
+function TradeReview({
+  trade,
+  screenshots,
+  locked,
+  onOutcomeChange,
+}: {
+  trade: TradeTaken;
+  screenshots: ScreenshotAttachment[];
+  locked: boolean;
+  onOutcomeChange: (tradeId: string, outcome: TradeOutcome) => void;
+}) {
   return (
-    <article className="review-item">
-      <strong>{trade.direction.toUpperCase()}</strong>
-      <span>{formatTime(trade.createdAt)}</span>
+    <article className={`review-item ${trade.outcome ? `outcome-${trade.outcome}` : ''}`}>
+      <div className="review-item-header">
+        <div>
+          <strong>{trade.direction.toUpperCase()}</strong>
+          <span>{formatTime(trade.createdAt)}</span>
+        </div>
+        <select
+          className="outcome-select"
+          value={trade.outcome ?? ''}
+          onChange={(event) => onOutcomeChange(trade.id, event.target.value as TradeOutcome)}
+          disabled={locked}
+          aria-label="Trade result"
+        >
+          <option value="" disabled>
+            Result
+          </option>
+          {tradeOutcomeOptions.map((outcome) => (
+            <option value={outcome} key={outcome}>
+              {tradeOutcomeLabels[outcome]}
+            </option>
+          ))}
+        </select>
+      </div>
       <p>{trade.notes || 'No notes.'}</p>
       {screenshots.length > 0 && (
         <div className="screenshot-grid">
