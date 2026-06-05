@@ -2,7 +2,6 @@ import Dexie, { Table } from 'dexie';
 import {
   BranchGroup,
   FlowBlock,
-  FlowTemplate,
   ScreenshotAttachment,
   Takeaway,
   TradeTaken,
@@ -16,7 +15,6 @@ class TradingJournalDb extends Dexie {
   trades!: Table<TradeTaken, string>;
   screenshots!: Table<ScreenshotAttachment, string>;
   takeaways!: Table<Takeaway, string>;
-  templates!: Table<FlowTemplate, string>;
 
   constructor() {
     super('tradingDecisionFlowJournal');
@@ -27,7 +25,9 @@ class TradingJournalDb extends Dexie {
       trades: 'id, sessionId, relatedFlowBlockId, createdAt',
       screenshots: 'id, tradeId, createdAt',
       takeaways: 'id, sessionId, sourceDate, createdAt, *tags',
-      templates: 'id, name, updatedAt, isStarter',
+    });
+    this.version(2).stores({
+      templates: null,
     });
   }
 }

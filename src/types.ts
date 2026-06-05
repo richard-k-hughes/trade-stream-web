@@ -75,26 +75,6 @@ export interface Takeaway {
   sourceDate: string;
 }
 
-export interface FlowTemplate {
-  id: string;
-  name: string;
-  description?: string;
-  blocks: TemplateBlock[];
-  createdAt: string;
-  updatedAt: string;
-  isStarter?: boolean;
-}
-
-export interface TemplateBlock {
-  id: string;
-  parentBlockId?: string;
-  branchGroupId?: string;
-  childBlockIds: string[];
-  type: BlockType;
-  text: string;
-  orderIndex: number;
-}
-
 export interface SessionBundle {
   session: TradingSession;
   blocks: FlowBlock[];

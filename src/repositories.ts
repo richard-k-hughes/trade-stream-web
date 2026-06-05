@@ -4,7 +4,6 @@ import {
   BlockStatus,
   BranchGroup,
   FlowBlock,
-  FlowTemplate,
   SessionBundle,
   Takeaway,
   TradeDirection,
@@ -236,89 +235,6 @@ export async function listTakeaways() {
   return db.takeaways.orderBy('createdAt').reverse().toArray();
 }
 
-export async function listTemplates() {
-  const records = await db.templates.orderBy('updatedAt').reverse().toArray();
-  const starterIds = records.filter((template) => template.isStarter).map((template) => template.id);
-  if (starterIds.length) await db.templates.bulkDelete(starterIds);
-  return records.filter((template) => !template.isStarter).map(normalizeTemplate);
-}
-
-export async function saveTemplate(template: Omit<FlowTemplate, 'id' | 'createdAt' | 'updatedAt'>) {
-  const timestamp = nowIso();
-  const record: FlowTemplate = {
-    ...template,
-    id: uid('template'),
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  };
-  await db.templates.add(record);
-  return record;
-}
-
-export async function updateTemplate(template: FlowTemplate) {
-  await db.templates.put({ ...template, updatedAt: nowIso(), isStarter: false });
-}
-
-export async function deleteTemplate(templateId: string) {
-  await db.templates.delete(templateId);
-}
-
-export async function insertTemplateIntoSession(
-  sessionId: string,
-  template: FlowTemplate,
-  parentBlockId?: string,
-) {
-  const timestamp = nowIso();
-  const idMap = new Map<string, string>();
-  template.blocks.forEach((block) => idMap.set(block.id, uid('block')));
-
-  const branchGroupIds = Array.from(new Set(template.blocks.map((block) => block.branchGroupId).filter(Boolean)));
-  const groupIdMap = new Map(branchGroupIds.map((id) => [id, uid('branch')]));
-
-  const blocks: FlowBlock[] = template.blocks.map((block, index) => {
-    const mappedParent = block.parentBlockId ? idMap.get(block.parentBlockId) : parentBlockId;
-    return {
-      id: idMap.get(block.id)!,
-      sessionId,
-      parentBlockId: mappedParent,
-      childBlockIds: block.childBlockIds.map((id) => idMap.get(id)!).filter(Boolean),
-      branchGroupId: block.branchGroupId ? groupIdMap.get(block.branchGroupId) : undefined,
-      type: block.type,
-      text: block.text,
-      status: 'pending',
-      createdAt: timestamp,
-      orderIndex: Date.now() + index,
-    };
-  });
-
-  const groups: BranchGroup[] = Array.from(groupIdMap.entries()).map(([oldGroupId, newGroupId]) => {
-    const groupBlocks = template.blocks.filter((block) => block.branchGroupId === oldGroupId);
-    const first = groupBlocks[0];
-    return {
-      id: newGroupId,
-      sessionId,
-      parentBlockId: first?.parentBlockId ? idMap.get(first.parentBlockId) : parentBlockId,
-      branchBlockIds: groupBlocks.map((block) => idMap.get(block.id)!).filter(Boolean),
-    };
-  });
-
-  await db.transaction('rw', db.flowBlocks, db.branchGroups, db.sessions, async () => {
-    await db.flowBlocks.bulkAdd(blocks);
-    if (groups.length) await db.branchGroups.bulkAdd(groups);
-    if (parentBlockId) {
-      const rootBlocks = blocks.filter((block) => block.parentBlockId === parentBlockId);
-      const parent = await db.flowBlocks.get(parentBlockId);
-      if (parent) {
-        await db.flowBlocks.update(parentBlockId, {
-          childBlockIds: [...parent.childBlockIds, ...rootBlocks.map((block) => block.id)],
-        });
-      }
-    }
-    await db.sessions.update(sessionId, { updatedAt: timestamp });
-  });
-  return blocks;
-}
-
 function normalizeFlowBlock(block: FlowBlock): FlowBlock {
   return {
     ...block,
@@ -327,22 +243,6 @@ function normalizeFlowBlock(block: FlowBlock): FlowBlock {
     status: normalizeBlockStatus(block.status),
     text: block.text ?? '',
     orderIndex: Number.isFinite(block.orderIndex) ? block.orderIndex : Date.now(),
-  };
-}
-
-function normalizeTemplate(template: FlowTemplate): FlowTemplate {
-  const ids = new Set((template.blocks ?? []).map((block) => block.id));
-  return {
-    ...template,
-    blocks: (template.blocks ?? []).map((block, index) => ({
-      ...block,
-      childBlockIds: Array.isArray(block.childBlockIds)
-        ? block.childBlockIds.filter((blockId) => ids.has(blockId))
-        : [],
-      type: normalizeBlockType(block.type),
-      text: block.text ?? '',
-      orderIndex: Number.isFinite(block.orderIndex) ? block.orderIndex : index,
-    })),
   };
 }
 

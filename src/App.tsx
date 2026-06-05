@@ -4,7 +4,6 @@ import {
   AlertTriangle,
   ArrowDownUp,
   ArrowRight,
-  BookOpen,
   CheckCircle2,
   ChevronRight,
   CircleDot,
@@ -30,24 +29,18 @@ import {
   addTakeaway,
   addTrade,
   createSession,
-  deleteTemplate,
   getSessionBundle,
-  insertTemplateIntoSession,
   listSessions,
   listTakeaways,
-  listTemplates,
   lockSession,
-  saveTemplate,
   selectBranch,
   updateFlowBlock,
   updateSession,
-  updateTemplate,
 } from './repositories';
 import {
   BlockType,
   BranchGroup,
   FlowBlock,
-  FlowTemplate,
   ScreenshotAttachment,
   SessionBundle,
   Takeaway,
@@ -57,7 +50,7 @@ import {
   blockTypeLabels,
 } from './types';
 
-const typeTemplates: Record<BlockType, string[]> = {
+const blockTextPresets: Record<BlockType, string[]> = {
   zone: [
     'London Low',
     'London High',
@@ -110,7 +103,6 @@ function App() {
       <Route path="/" element={<DashboardPage />} />
       <Route path="/session/:id" element={<SessionPage />} />
       <Route path="/takeaways" element={<GlobalTakeawaysPage />} />
-      <Route path="/templates" element={<TemplatesPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
@@ -154,9 +146,6 @@ function DashboardPage() {
         <nav className="top-actions">
           <Link to="/takeaways" className="button secondary">
             <Lightbulb size={18} /> Global Takeaways
-          </Link>
-          <Link to="/templates" className="button secondary">
-            <BookOpen size={18} /> Templates
           </Link>
           <button onClick={handleNewSession} className="button primary">
             <Plus size={18} /> New Session
@@ -609,22 +598,22 @@ function AddBlockPanel({
   onAdded: (nextActive?: string) => void;
 }) {
   const [type, setType] = useState<BlockType>('zone');
-  const [text, setText] = useState(typeTemplates.zone[0]);
+  const [text, setText] = useState(blockTextPresets.zone[0]);
   const [branches, setBranches] = useState([
-    { type: 'condition' as BlockType, text: typeTemplates.condition[0] },
-    { type: 'invalidation' as BlockType, text: typeTemplates.invalidation[0] },
+    { type: 'condition' as BlockType, text: blockTextPresets.condition[0] },
+    { type: 'invalidation' as BlockType, text: blockTextPresets.invalidation[0] },
   ]);
 
   const handleTypeChange = (next: BlockType) => {
     setType(next);
-    setText(typeTemplates[next][0]);
+    setText(blockTextPresets[next][0]);
   };
 
   const handleAddBlock = async (event: FormEvent) => {
     event.preventDefault();
     if (!text.trim()) return;
     const block = await addFlowBlock({ sessionId, parentBlockId: activeParentId, type, text: text.trim() });
-    setText(typeTemplates[type][0]);
+    setText(blockTextPresets[type][0]);
     onAdded(block.id);
   };
 
@@ -654,9 +643,9 @@ function AddBlockPanel({
           ))}
         </div>
         <div className="chip-wrap">
-          {typeTemplates[type].map((template) => (
-            <button type="button" className="chip" key={template} onClick={() => setText(template)}>
-              {template}
+          {blockTextPresets[type].map((preset) => (
+            <button type="button" className="chip" key={preset} onClick={() => setText(preset)}>
+              {preset}
             </button>
           ))}
         </div>
@@ -678,7 +667,7 @@ function AddBlockPanel({
                 const nextType = event.target.value as BlockType;
                 setBranches((current) =>
                   current.map((item, itemIndex) =>
-                    itemIndex === index ? { type: nextType, text: typeTemplates[nextType][0] } : item,
+                    itemIndex === index ? { type: nextType, text: blockTextPresets[nextType][0] } : item,
                   ),
                 );
               }}
@@ -710,7 +699,7 @@ function AddBlockPanel({
               onClick={() =>
                 setBranches((current) => [
                   ...current,
-                  { type: 'invalidation', text: typeTemplates.invalidation[Math.min(current.length, 2)] },
+                  { type: 'invalidation', text: blockTextPresets.invalidation[Math.min(current.length, 2)] },
                 ])
               }
             >
@@ -947,243 +936,6 @@ function GlobalTakeawaysPage() {
         {filtered.length === 0 && <div className="empty-state">No takeaways found.</div>}
       </section>
     </main>
-  );
-}
-
-function TemplatesPage() {
-  const [templates, setTemplates] = useState<FlowTemplate[]>([]);
-  const [sessions, setSessions] = useState<TradingSession[]>([]);
-  const [selectedTemplate, setSelectedTemplate] = useState<FlowTemplate | undefined>();
-
-  const refresh = async () => {
-    const [templateRecords, sessionRecords] = await Promise.all([listTemplates(), listSessions()]);
-    setTemplates(templateRecords);
-    setSessions(sessionRecords.filter((session) => !session.isLocked));
-    if (!selectedTemplate && templateRecords[0]) setSelectedTemplate(templateRecords[0]);
-  };
-
-  useEffect(() => {
-    refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  return (
-    <main className="page-shell templates-page">
-      <header className="topbar">
-        <div>
-          <Link to="/" className="text-link">
-            Dashboard
-          </Link>
-          <h1>Templates</h1>
-        </div>
-      </header>
-      <div className="templates-layout">
-        <section className="template-list">
-          {templates.map((template) => (
-            <button
-              className={`template-list-item ${selectedTemplate?.id === template.id ? 'selected' : ''}`}
-              key={template.id}
-              onClick={() => setSelectedTemplate(template)}
-            >
-              <strong>{template.name}</strong>
-              <span>{template.blocks.length} blocks {template.isStarter ? 'starter' : 'custom'}</span>
-            </button>
-          ))}
-        </section>
-        <TemplateEditor
-          template={selectedTemplate}
-          sessions={sessions}
-          onChanged={async () => {
-            setSelectedTemplate(undefined);
-            await refresh();
-          }}
-        />
-      </div>
-    </main>
-  );
-}
-
-function TemplateEditor({
-  template,
-  sessions,
-  onChanged,
-}: {
-  template?: FlowTemplate;
-  sessions: TradingSession[];
-  onChanged: () => void;
-}) {
-  const [name, setName] = useState('');
-  const [rows, setRows] = useState<Array<{ type: BlockType; text: string; branchGroup?: string }>>([]);
-  const [insertSessionId, setInsertSessionId] = useState('');
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    setName(template?.name ?? 'New template');
-    setRows(
-      template?.blocks.map((block) => ({
-        type: block.type,
-        text: block.text,
-        branchGroup: block.branchGroupId ? 'branch' : '',
-      })) ?? [
-        { type: 'zone', text: 'Key zone' },
-        { type: 'event', text: 'Price tapped key zone and rejected strongly' },
-        { type: 'condition', text: 'Waiting for confirmation' },
-      ],
-    );
-    setInsertSessionId(sessions[0]?.id ?? '');
-  }, [template, sessions]);
-
-  const buildTemplate = (): Omit<FlowTemplate, 'id' | 'createdAt' | 'updatedAt'> => {
-    const ids = rows.map((_, index) => `draft_${index}`);
-    const branchGroupId = rows.some((row) => row.branchGroup) ? 'draft_branch' : undefined;
-    return {
-      name: name.trim() || 'Untitled template',
-      isStarter: false,
-      blocks: rows.map((row, index) => {
-        const isBranch = Boolean(row.branchGroup);
-        const parentIndex = isBranch ? rows.findIndex((candidate, candidateIndex) => candidateIndex < index && !candidate.branchGroup) : index - 1;
-        return {
-          id: ids[index],
-          parentBlockId: parentIndex >= 0 ? ids[parentIndex] : undefined,
-          branchGroupId: isBranch ? branchGroupId : undefined,
-          childBlockIds: ids.filter((_, childIndex) => {
-            if (childIndex <= index) return false;
-            if (rows[childIndex].branchGroup) return childIndex === index + 1 && !isBranch;
-            return childIndex === index + 1 && !rows[childIndex].branchGroup;
-          }),
-          type: row.type,
-          text: row.text,
-          orderIndex: index,
-        };
-      }),
-    };
-  };
-
-  const handleSave = async () => {
-    const draft = buildTemplate();
-    if (template) {
-      await updateTemplate({ ...template, ...draft });
-    } else {
-      await saveTemplate(draft);
-    }
-    onChanged();
-  };
-
-  const handleInsert = async () => {
-    if (!template || !insertSessionId) return;
-    await insertTemplateIntoSession(insertSessionId, template);
-    navigate(`/session/${insertSessionId}`);
-  };
-
-  return (
-    <section className="template-editor">
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">{template?.isStarter ? 'Starter template' : 'Editable template'}</p>
-          <h2>{template ? 'Edit playbook' : 'Create playbook'}</h2>
-        </div>
-        <button
-          className="button secondary"
-          onClick={() => {
-            setName('New template');
-            setRows([{ type: 'zone', text: 'Key zone' }]);
-          }}
-        >
-          <Plus size={17} /> New
-        </button>
-      </div>
-      <input value={name} onChange={(event) => setName(event.target.value)} />
-      <div className="template-rows">
-        {rows.map((row, index) => (
-          <div className="template-row" key={index}>
-            <select
-              value={row.type}
-              onChange={(event) =>
-                setRows((current) =>
-                  current.map((item, itemIndex) =>
-                    itemIndex === index ? { ...item, type: event.target.value as BlockType } : item,
-                  ),
-                )
-              }
-            >
-              {blockTypes.map((typeOption) => (
-                <option value={typeOption} key={typeOption}>
-                  {blockTypeLabels[typeOption]}
-                </option>
-              ))}
-            </select>
-            <input
-              value={row.text}
-              onChange={(event) =>
-                setRows((current) =>
-                  current.map((item, itemIndex) =>
-                    itemIndex === index ? { ...item, text: event.target.value } : item,
-                  ),
-                )
-              }
-            />
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={Boolean(row.branchGroup)}
-                onChange={(event) =>
-                  setRows((current) =>
-                    current.map((item, itemIndex) =>
-                      itemIndex === index ? { ...item, branchGroup: event.target.checked ? 'branch' : '' } : item,
-                    ),
-                  )
-                }
-              />
-              branch
-            </label>
-          </div>
-        ))}
-      </div>
-      <div className="inline-actions">
-        <button
-          className="button ghost"
-          onClick={() => setRows((current) => [...current, { type: 'condition', text: 'Waiting for confirmation' }])}
-        >
-          <Plus size={17} /> Block
-        </button>
-        <button
-          className="button ghost"
-          onClick={() => setRows((current) => [...current, { type: 'invalidation', text: 'Invalidation path', branchGroup: 'branch' }])}
-        >
-          <Split size={17} /> Branch Option
-        </button>
-        <button className="button primary" onClick={handleSave}>
-          <Save size={17} /> Save Template
-        </button>
-        {template && (
-          <button
-            className="button danger"
-            onClick={async () => {
-              if (!window.confirm('Delete this template?')) return;
-              await deleteTemplate(template.id);
-              onChanged();
-            }}
-          >
-            <Trash2 size={17} /> Delete
-          </button>
-        )}
-      </div>
-      {template && (
-        <div className="insert-row">
-          <select value={insertSessionId} onChange={(event) => setInsertSessionId(event.target.value)}>
-            <option value="">Choose active session</option>
-            {sessions.map((session) => (
-              <option value={session.id} key={session.id}>
-                {formatDate(session.dateCreated)} {session.instrument}
-              </option>
-            ))}
-          </select>
-          <button className="button secondary" onClick={handleInsert} disabled={!insertSessionId}>
-            Insert Into Session
-          </button>
-        </div>
-      )}
-    </section>
   );
 }
 
