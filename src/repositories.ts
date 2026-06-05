@@ -4,6 +4,7 @@ import {
   BlockStatus,
   BranchGroup,
   FlowBlock,
+  ScreenshotAttachment,
   SessionBundle,
   Takeaway,
   TradeDirection,
@@ -352,6 +353,11 @@ export async function listTakeaways() {
 
 export async function listTrades() {
   return db.trades.orderBy('createdAt').reverse().toArray();
+}
+
+export async function listTradeScreenshots(tradeIds: string[]): Promise<ScreenshotAttachment[]> {
+  if (tradeIds.length === 0) return [];
+  return db.screenshots.where('tradeId').anyOf(tradeIds).toArray();
 }
 
 function normalizeFlowBlock(block: FlowBlock): FlowBlock {

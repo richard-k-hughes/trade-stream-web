@@ -795,7 +795,16 @@ select:focus {
 }
 
 .trade-log-main {
+  flex: 1 1 auto;
   min-width: 0;
+}
+
+.trade-log-side {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
 }
 
 .trade-log-title {
@@ -821,6 +830,23 @@ select:focus {
 .trade-direction.short {
   background: #fff1f0;
   color: #9b332b;
+}
+
+.trade-log-screenshots {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+  max-width: 270px;
+}
+
+.trade-log-screenshots img {
+  width: 82px;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #d8e0eb;
+  background: #f4f7fb;
 }
 
 @media (max-width: 1080px) {
@@ -862,6 +888,20 @@ select:focus {
 
   .outcome-select {
     width: 100%;
+  }
+
+  .library-row,
+  .trade-log-side {
+    align-items: flex-start;
+  }
+
+  .library-row {
+    flex-direction: column;
+  }
+
+  .trade-log-screenshots {
+    justify-content: flex-start;
+    max-width: 100%;
   }
 }
 

@@ -33,6 +33,7 @@ import {
   getSessionBundle,
   listSessions,
   listTakeaways,
+  listTradeScreenshots,
   listTrades,
   lockSession,
   selectBranch,
@@ -1004,23 +1005,35 @@ function TakeawayPanel({
 function TradeLogPage() {
   const [trades, setTrades] = useState<TradeTaken[]>([]);
   const [sessions, setSessions] = useState<TradingSession[]>([]);
+  const [screenshots, setScreenshots] = useState<ScreenshotAttachment[]>([]);
   const [query, setQuery] = useState('');
 
   useEffect(() => {
-    Promise.all([listTrades(), listSessions()]).then(([nextTrades, nextSessions]) => {
+    Promise.all([listTrades(), listSessions()]).then(async ([nextTrades, nextSessions]) => {
+      const nextScreenshots = await listTradeScreenshots(nextTrades.map((trade) => trade.id));
       setTrades(nextTrades);
       setSessions(nextSessions);
+      setScreenshots(nextScreenshots);
     });
   }, []);
 
   const sessionMap = useMemo(() => new Map(sessions.map((session) => [session.id, session])), [sessions]);
+  const screenshotsByTradeId = useMemo(() => {
+    const map = new Map<string, ScreenshotAttachment[]>();
+    screenshots.forEach((shot) => {
+      map.set(shot.tradeId, [...(map.get(shot.tradeId) ?? []), shot]);
+    });
+    return map;
+  }, [screenshots]);
   const normalizedQuery = query.toLowerCase();
   const filtered = trades.filter((trade) => {
     const session = sessionMap.get(trade.sessionId);
+    const tradeScreenshots = screenshotsByTradeId.get(trade.id) ?? [];
     const haystack = [
       trade.direction,
       trade.notes,
       trade.outcome ? tradeOutcomeLabels[trade.outcome] : '',
+      ...tradeScreenshots.map((shot) => shot.filename),
       session?.instrument ?? '',
       session ? formatDate(session.dateCreated) : '',
       formatDate(trade.createdAt),
@@ -1047,6 +1060,7 @@ function TradeLogPage() {
       <section className="takeaway-library trade-log">
         {filtered.map((trade) => {
           const session = sessionMap.get(trade.sessionId);
+          const tradeScreenshots = screenshotsByTradeId.get(trade.id) ?? [];
           return (
             <Link to={`/session/${trade.sessionId}`} className="library-row trade-log-row" key={trade.id}>
               <div className="trade-log-main">
@@ -1061,7 +1075,16 @@ function TradeLogPage() {
                 <p>{trade.notes || 'No notes.'}</p>
                 <span>{session?.instrument || 'NQ'} session</span>
               </div>
-              <time>{formatDate(trade.createdAt)}</time>
+              <div className="trade-log-side">
+                {tradeScreenshots.length > 0 && (
+                  <div className="trade-log-screenshots" aria-label={`${tradeScreenshots.length} attached image(s)`}>
+                    {tradeScreenshots.map((shot) => (
+                      <ScreenshotImage key={shot.id} shot={shot} />
+                    ))}
+                  </div>
+                )}
+                <time>{formatDate(trade.createdAt)}</time>
+              </div>
             </Link>
           );
         })}
