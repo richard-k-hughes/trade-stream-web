@@ -1074,13 +1074,35 @@ function TradeLogPage() {
 function GlobalTakeawaysPage() {
   const [takeaways, setTakeaways] = useState<Takeaway[]>([]);
   const [query, setQuery] = useState('');
+  const [text, setText] = useState('');
+  const [tags, setTags] = useState('');
+
+  const refresh = async () => {
+    const nextTakeaways = await listTakeaways();
+    setTakeaways(nextTakeaways);
+  };
 
   useEffect(() => {
-    listTakeaways().then(setTakeaways);
+    void refresh();
   }, []);
 
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!text.trim()) return;
+    await addTakeaway({
+      text: text.trim(),
+      tags: tags
+        .split(',')
+        .map((tag) => tag.trim())
+        .filter(Boolean),
+    });
+    setText('');
+    setTags('');
+    await refresh();
+  };
+
   const filtered = takeaways.filter((takeaway) => {
-    const haystack = `${takeaway.text} ${takeaway.tags?.join(' ') ?? ''}`.toLowerCase();
+    const haystack = `${takeaway.text} ${takeaway.tags?.join(' ') ?? ''} ${takeaway.sessionId ? 'session' : 'manual global'}`.toLowerCase();
     return haystack.includes(query.toLowerCase());
   });
 
@@ -1098,16 +1120,45 @@ function GlobalTakeawaysPage() {
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search takeaways" />
         </div>
       </header>
+      <section className="tool-panel takeaway-panel global-takeaway-form">
+        <div className="section-heading compact-heading">
+          <h2>Add Takeaway</h2>
+        </div>
+        <form onSubmit={handleSubmit} className="stacked-form">
+          <textarea value={text} onChange={(event) => setText(event.target.value)} rows={3} placeholder="Manual takeaway..." />
+          <input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="tags optional, comma separated" />
+          <button className="button gold" type="submit">
+            <Lightbulb size={17} /> Add Takeaway
+          </button>
+        </form>
+      </section>
       <section className="takeaway-library">
-        {filtered.map((takeaway) => (
-          <Link to={`/session/${takeaway.sessionId}`} className="library-row" key={takeaway.id}>
-            <div>
-              <p>{takeaway.text}</p>
-              {takeaway.tags?.length ? <span>{takeaway.tags.join(', ')}</span> : null}
-            </div>
-            <time>{formatDate(takeaway.sourceDate)}</time>
-          </Link>
-        ))}
+        {filtered.map((takeaway) => {
+          const rowContents = (
+            <>
+              <div className="library-row-main">
+                <p>{takeaway.text}</p>
+                {(!takeaway.sessionId || takeaway.tags?.length) && (
+                  <div className="library-row-meta">
+                    {!takeaway.sessionId && <span>Manual</span>}
+                    {takeaway.tags?.length ? <span>{takeaway.tags.join(', ')}</span> : null}
+                  </div>
+                )}
+              </div>
+              <time>{formatDate(takeaway.sourceDate)}</time>
+            </>
+          );
+
+          return takeaway.sessionId ? (
+            <Link to={`/session/${takeaway.sessionId}`} className="library-row" key={takeaway.id}>
+              {rowContents}
+            </Link>
+          ) : (
+            <article className="library-row static-row" key={takeaway.id}>
+              {rowContents}
+            </article>
+          );
+        })}
         {filtered.length === 0 && <div className="empty-state">No takeaways found.</div>}
       </section>
     </main>

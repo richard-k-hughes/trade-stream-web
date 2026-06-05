@@ -76,7 +76,7 @@ export interface ScreenshotAttachment {
 
 export interface Takeaway {
   id: string;
-  sessionId: string;
+  sessionId?: string;
   text: string;
   createdAt: string;
   tags?: string[];

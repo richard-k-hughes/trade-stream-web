@@ -323,23 +323,25 @@ export async function updateTradeOutcome(tradeId: string, outcome: TradeOutcome)
 }
 
 export async function addTakeaway(input: {
-  sessionId: string;
-  sessionDate: string;
+  sessionId?: string;
+  sessionDate?: string;
   text: string;
   tags?: string[];
 }) {
   const timestamp = nowIso();
   const takeaway: Takeaway = {
     id: uid('takeaway'),
-    sessionId: input.sessionId,
+    ...(input.sessionId ? { sessionId: input.sessionId } : {}),
     text: input.text,
     tags: input.tags,
-    sourceDate: input.sessionDate,
+    sourceDate: input.sessionDate ?? timestamp,
     createdAt: timestamp,
   };
   await db.transaction('rw', db.takeaways, db.sessions, async () => {
     await db.takeaways.add(takeaway);
-    await db.sessions.update(input.sessionId, { updatedAt: timestamp });
+    if (input.sessionId) {
+      await db.sessions.update(input.sessionId, { updatedAt: timestamp });
+    }
   });
   return takeaway;
 }

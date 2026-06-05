@@ -751,6 +751,10 @@ select:focus {
   gap: 10px;
 }
 
+.global-takeaway-form {
+  margin-bottom: 16px;
+}
+
 .library-row {
   display: flex;
   justify-content: space-between;
@@ -760,6 +764,20 @@ select:focus {
   border-radius: 8px;
   background: #ffffff;
   text-decoration: none;
+}
+
+.library-row.static-row {
+  cursor: default;
+}
+
+.library-row-main {
+  min-width: 0;
+}
+
+.library-row-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .library-row p {
