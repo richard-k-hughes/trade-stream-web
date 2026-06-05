@@ -348,6 +348,10 @@ export async function listTakeaways() {
   return db.takeaways.orderBy('createdAt').reverse().toArray();
 }
 
+export async function listTrades() {
+  return db.trades.orderBy('createdAt').reverse().toArray();
+}
+
 function normalizeFlowBlock(block: FlowBlock): FlowBlock {
   return {
     ...block,

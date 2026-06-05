@@ -20,7 +20,7 @@ import {
   XCircle,
   Zap,
 } from 'lucide-react';
-import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, ClipboardEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentType } from 'react';
 import { Link, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import {
@@ -33,6 +33,7 @@ import {
   getSessionBundle,
   listSessions,
   listTakeaways,
+  listTrades,
   lockSession,
   selectBranch,
   updateFlowBlock,
@@ -108,6 +109,7 @@ function App() {
       <Route path="/" element={<DashboardPage />} />
       <Route path="/session/:id" element={<SessionPage />} />
       <Route path="/takeaways" element={<GlobalTakeawaysPage />} />
+      <Route path="/trades" element={<TradeLogPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
@@ -149,6 +151,9 @@ function DashboardPage() {
           <h1>NQ Decision Flow</h1>
         </div>
         <nav className="top-actions">
+          <Link to="/trades" className="button secondary">
+            <ArrowDownUp size={18} /> Trade Log
+          </Link>
           <Link to="/takeaways" className="button secondary">
             <Lightbulb size={18} /> Global Takeaways
           </Link>
@@ -162,7 +167,7 @@ function DashboardPage() {
         {sessions.length === 0 ? (
           <div className="empty-state">
             <NotebookPen size={34} />
-            <h2>No sessions yet</h2>
+            <h2>No Sessions Yet</h2>
             <p>Create a session, write the market context, then build the live decision path as price acts.</p>
             <button onClick={handleNewSession} className="button primary">
               <Plus size={18} /> New Session
@@ -174,7 +179,6 @@ function DashboardPage() {
               <div className="session-card-header">
                 <div>
                   <p className="eyebrow">{formatDate(session.dateCreated)}</p>
-                  <h2>{session.instrument || 'NQ'} session</h2>
                 </div>
                 <span className={`status-pill ${session.isLocked ? 'locked' : 'active'}`}>
                   {session.isLocked ? 'Read-only' : 'Active'}
@@ -255,9 +259,9 @@ function SessionPage() {
           <Link to="/" className="text-link">
             Dashboard
           </Link>
-          <h1>{bundle.session.instrument || 'NQ'} live decision flow</h1>
+          <h1>{bundle.session.instrument || 'NQ'} Live Decision Flow</h1>
           <span className={`status-pill ${locked ? 'locked' : 'active'}`}>
-            {locked ? 'Read-only review' : 'Editable session'}
+            {locked ? 'Read-only review' : 'Live Session'}
           </span>
         </div>
         <div className="top-actions">
@@ -294,7 +298,7 @@ function SessionPage() {
         <aside className="side-pane no-print">
           {!locked && (
             <div className="active-anchor">
-              <p className="eyebrow">Active build point</p>
+              <p className="eyebrow">Active Build Point</p>
               <strong>{activeBlock ? blockTypeLabels[activeBlock.type] : 'Session root'}</strong>
               <span>{activeBlock?.text ?? 'New blocks will start a root flow.'}</span>
             </div>
@@ -343,28 +347,18 @@ function MarketContextEditor({
   onChange: (patch: Partial<TradingSession>) => void;
 }) {
   const [text, setText] = useState(session.marketContextText);
-  const [instrument, setInstrument] = useState(session.instrument || 'NQ');
 
   useEffect(() => {
     setText(session.marketContextText);
-    setInstrument(session.instrument || 'NQ');
-  }, [session.id, session.instrument, session.marketContextText]);
+  }, [session.id, session.marketContextText]);
 
   return (
     <section className="context-panel">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Market context</p>
+          <p className="eyebrow">Market Context</p>
           <h2>What is price doing and what are you waiting for?</h2>
         </div>
-        <input
-          className="instrument-input"
-          value={instrument}
-          disabled={locked}
-          onChange={(event) => setInstrument(event.target.value)}
-          onBlur={() => onChange({ instrument: instrument.trim() || 'NQ' })}
-          aria-label="Instrument"
-        />
       </div>
       {locked ? (
         <p className="readonly-text">{session.marketContextText || 'No market context entered.'}</p>
@@ -408,12 +402,12 @@ function FlowDiagram({
     <section className="flow-panel">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Structured flow</p>
-          <h2>Decision tree</h2>
+          <p className="eyebrow">Structured Flow</p>
+          <h2>Decision Tree</h2>
         </div>
         {!locked && (
           <button onClick={() => onSelectActive(undefined)} className="button ghost">
-            Add from root
+            Add from Root
           </button>
         )}
       </div>
@@ -494,7 +488,7 @@ function FlowNode({
               return (
                 <div className="branch-group" key={child.branchGroupId}>
                   <div className="branch-group-label">
-                    <Split size={16} /> Possible paths
+                    <Split size={16} /> Possible Paths
                   </div>
                   <div className="branch-columns">
                     {(branchBlocks as FlowBlock[]).map((branchBlock) => (
@@ -668,7 +662,7 @@ function AddBlockPanel({
   return (
     <section className="tool-panel">
       <div className="section-heading compact-heading">
-        <h2>Add block</h2>
+        <h2>Add Block</h2>
       </div>
       <form onSubmit={handleAddBlock} className="stacked-form">
         <div className="segmented">
@@ -698,7 +692,7 @@ function AddBlockPanel({
 
       <div className="branch-builder">
         <div className="section-heading compact-heading">
-          <h2>Add branch group</h2>
+          <h2>Add Branch Group</h2>
         </div>
         {branches.map((branch, index) => (
           <div className="branch-row" key={index}>
@@ -784,6 +778,28 @@ function TradePanel({
   const [files, setFiles] = useState<File[]>([]);
   const entryBlocks = blocks.filter((block) => block.type === 'entry');
 
+  const appendFiles = (nextFiles: File[]) => {
+    if (nextFiles.length === 0) return;
+    setFiles((current) => [...current, ...nextFiles]);
+  };
+
+  const handlePaste = (event: ClipboardEvent<HTMLFormElement>) => {
+    const pastedImages = Array.from(event.clipboardData.items)
+      .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
+      .map((item, index) => {
+        const file = item.getAsFile();
+        if (!file) return undefined;
+        const fallbackExtension = file.type.split('/')[1] || 'png';
+        const filename = file.name || `pasted-screenshot-${Date.now()}-${index + 1}.${fallbackExtension}`;
+        return new File([file], filename, { type: file.type, lastModified: file.lastModified });
+      })
+      .filter((file): file is File => Boolean(file));
+
+    if (pastedImages.length === 0) return;
+    event.preventDefault();
+    appendFiles(pastedImages);
+  };
+
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (!notes.trim() && files.length === 0) return;
@@ -803,10 +819,15 @@ function TradePanel({
   return (
     <section className="tool-panel trade-panel">
       <div className="section-heading compact-heading">
-        <h2>Trades taken</h2>
+        <h2 className="inline-panel-title">
+          <span>Trades Taken</span>
+          <span className="title-link-wrap">
+            (<Link to="/trades" className="text-link">View Trade Log</Link>)
+          </span>
+        </h2>
       </div>
       {!locked && (
-        <form onSubmit={handleSubmit} className="stacked-form">
+        <form onSubmit={handleSubmit} onPaste={handlePaste} className="stacked-form">
           <div className="segmented two">
             <button type="button" className={direction === 'long' ? 'selected' : ''} onClick={() => setDirection('long')}>
               Long
@@ -824,13 +845,16 @@ function TradePanel({
             ))}
           </select>
           <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} placeholder="Decision notes only." />
-          <label className="file-drop">
+          <label className="file-drop" tabIndex={0}>
             <Upload size={16} /> Screenshots
             <input
               type="file"
               accept="image/*"
               multiple
-              onChange={(event: ChangeEvent<HTMLInputElement>) => setFiles(Array.from(event.target.files ?? []))}
+              onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                appendFiles(Array.from(event.target.files ?? []));
+                event.currentTarget.value = '';
+              }}
             />
           </label>
           {files.length > 0 && <p className="muted">{files.length} image(s) queued</p>}
@@ -948,10 +972,12 @@ function TakeawayPanel({
   return (
     <section className="tool-panel takeaway-panel">
       <div className="section-heading compact-heading">
-        <h2>Takeaways</h2>
-        <Link to="/takeaways" className="text-link">
-          Global
-        </Link>
+        <h2 className="inline-panel-title">
+          <span>Takeaways</span>
+          <span className="title-link-wrap">
+            (<Link to="/takeaways" className="text-link">View Global Takeaways</Link>)
+          </span>
+        </h2>
       </div>
       {!locked && (
         <form onSubmit={handleSubmit} className="stacked-form">
@@ -972,6 +998,76 @@ function TakeawayPanel({
         {takeaways.length === 0 && <p className="muted">No takeaways yet.</p>}
       </div>
     </section>
+  );
+}
+
+function TradeLogPage() {
+  const [trades, setTrades] = useState<TradeTaken[]>([]);
+  const [sessions, setSessions] = useState<TradingSession[]>([]);
+  const [query, setQuery] = useState('');
+
+  useEffect(() => {
+    Promise.all([listTrades(), listSessions()]).then(([nextTrades, nextSessions]) => {
+      setTrades(nextTrades);
+      setSessions(nextSessions);
+    });
+  }, []);
+
+  const sessionMap = useMemo(() => new Map(sessions.map((session) => [session.id, session])), [sessions]);
+  const normalizedQuery = query.toLowerCase();
+  const filtered = trades.filter((trade) => {
+    const session = sessionMap.get(trade.sessionId);
+    const haystack = [
+      trade.direction,
+      trade.notes,
+      trade.outcome ? tradeOutcomeLabels[trade.outcome] : '',
+      session?.instrument ?? '',
+      session ? formatDate(session.dateCreated) : '',
+      formatDate(trade.createdAt),
+    ]
+      .join(' ')
+      .toLowerCase();
+    return haystack.includes(normalizedQuery);
+  });
+
+  return (
+    <main className="page-shell">
+      <header className="topbar">
+        <div>
+          <Link to="/" className="text-link">
+            Dashboard
+          </Link>
+          <h1>Trade Log</h1>
+        </div>
+        <div className="search-box">
+          <Search size={18} />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search trades" />
+        </div>
+      </header>
+      <section className="takeaway-library trade-log">
+        {filtered.map((trade) => {
+          const session = sessionMap.get(trade.sessionId);
+          return (
+            <Link to={`/session/${trade.sessionId}`} className="library-row trade-log-row" key={trade.id}>
+              <div className="trade-log-main">
+                <div className="trade-log-title">
+                  <span className={`trade-direction ${trade.direction}`}>{trade.direction.toUpperCase()}</span>
+                  {trade.outcome ? (
+                    <span className="small-pill">{tradeOutcomeLabels[trade.outcome]}</span>
+                  ) : (
+                    <span className="small-pill">Result pending</span>
+                  )}
+                </div>
+                <p>{trade.notes || 'No notes.'}</p>
+                <span>{session?.instrument || 'NQ'} session</span>
+              </div>
+              <time>{formatDate(trade.createdAt)}</time>
+            </Link>
+          );
+        })}
+        {filtered.length === 0 && <div className="empty-state">No trades found.</div>}
+      </section>
+    </main>
   );
 }
 

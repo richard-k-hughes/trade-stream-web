@@ -328,6 +328,19 @@ a {
   letter-spacing: 0;
 }
 
+.inline-panel-title {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.title-link-wrap {
+  color: #687586;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
 .compact-heading {
   align-items: center;
   margin-bottom: 10px;
@@ -616,6 +629,12 @@ select:focus {
   font-weight: 800;
 }
 
+.file-drop:focus {
+  border-color: #5d91d6;
+  box-shadow: 0 0 0 3px rgba(69, 130, 207, 0.15);
+  outline: none;
+}
+
 .file-drop input {
   display: none;
 }
@@ -751,6 +770,39 @@ select:focus {
 .library-row time {
   color: #6d7a8b;
   font-size: 0.88rem;
+}
+
+.trade-log-row {
+  align-items: flex-start;
+}
+
+.trade-log-main {
+  min-width: 0;
+}
+
+.trade-log-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.trade-direction {
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 0.76rem;
+  font-weight: 900;
+}
+
+.trade-direction.long {
+  background: #e7f8ee;
+  color: #22613d;
+}
+
+.trade-direction.short {
+  background: #fff1f0;
+  color: #9b332b;
 }
 
 @media (max-width: 1080px) {
