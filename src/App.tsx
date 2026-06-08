@@ -680,7 +680,13 @@ function AddBlockPanel({
         </div>
         <div className="chip-wrap">
           {blockTextPresets[type].map((preset) => (
-            <button type="button" className="chip" key={preset} onClick={() => setText(preset)}>
+            <button
+              type="button"
+              className={`chip ${text === preset ? 'selected' : ''}`}
+              key={preset}
+              aria-pressed={text === preset}
+              onClick={() => setText(preset)}
+            >
               {preset}
             </button>
           ))}
@@ -697,24 +703,48 @@ function AddBlockPanel({
         </div>
         {branches.map((branch, index) => (
           <div className="branch-row" key={index}>
-            <select
-              value={branch.type}
-              onChange={(event) => {
-                const nextType = event.target.value as BlockType;
-                setBranches((current) =>
-                  current.map((item, itemIndex) =>
-                    itemIndex === index ? { type: nextType, text: blockTextPresets[nextType][0] } : item,
-                  ),
-                );
-              }}
-            >
-              {blockTypes.map((item) => (
-                <option value={item} key={item}>
-                  {blockTypeLabels[item]}
-                </option>
+            <div className="branch-row-header">
+              <span className="branch-path-label">Path {index + 1}</span>
+              <select
+                aria-label={`Block type for path ${index + 1}`}
+                value={branch.type}
+                onChange={(event) => {
+                  const nextType = event.target.value as BlockType;
+                  setBranches((current) =>
+                    current.map((item, itemIndex) =>
+                      itemIndex === index ? { type: nextType, text: blockTextPresets[nextType][0] } : item,
+                    ),
+                  );
+                }}
+              >
+                {blockTypes.map((item) => (
+                  <option value={item} key={item}>
+                    {blockTypeLabels[item]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="chip-wrap" aria-label={`Preset options for path ${index + 1}`}>
+              {blockTextPresets[branch.type].map((preset) => (
+                <button
+                  type="button"
+                  className={`chip ${branch.text === preset ? 'selected' : ''}`}
+                  key={preset}
+                  aria-pressed={branch.text === preset}
+                  onClick={() =>
+                    setBranches((current) =>
+                      current.map((item, itemIndex) =>
+                        itemIndex === index ? { ...item, text: preset } : item,
+                      ),
+                    )
+                  }
+                >
+                  {preset}
+                </button>
               ))}
-            </select>
+            </div>
             <textarea
+              aria-label={`Text for path ${index + 1}`}
               value={branch.text}
               rows={2}
               onChange={(event) =>

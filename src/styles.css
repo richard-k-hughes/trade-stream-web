@@ -611,10 +611,35 @@ select:focus {
   font-size: 0.8rem;
 }
 
+.chip.selected {
+  background: #e8f2ff;
+  border-color: #98bee8;
+  color: #1f4f8a;
+}
+
 .branch-row {
-  display: grid;
-  grid-template-columns: 130px minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 8px;
+  padding: 12px 0;
+  border-top: 1px solid #e2e8f0;
+}
+
+.branch-row-header {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.branch-row-header select {
+  min-width: 0;
+}
+
+.branch-path-label {
+  color: #536071;
+  font-size: 0.82rem;
+  font-weight: 900;
 }
 
 .file-drop {
@@ -877,7 +902,7 @@ select:focus {
     align-items: stretch;
   }
 
-  .branch-row {
+  .branch-row-header {
     grid-template-columns: 1fr;
   }
 
