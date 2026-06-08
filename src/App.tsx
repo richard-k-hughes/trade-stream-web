@@ -983,6 +983,44 @@ function ScreenshotImage({ shot }: { shot: ScreenshotAttachment }) {
   return url ? <img src={url} alt={shot.filename} /> : null;
 }
 
+function ScreenshotLightbox({
+  shot,
+  onClose,
+}: {
+  shot: ScreenshotAttachment;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="screenshot-lightbox"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div className="screenshot-lightbox-content" role="dialog" aria-modal="true" aria-label={shot.filename}>
+        <button type="button" className="screenshot-lightbox-close" onClick={onClose} aria-label="Close image viewer" autoFocus>
+          <XCircle size={28} />
+        </button>
+        <ScreenshotImage shot={shot} />
+      </div>
+    </div>
+  );
+}
+
 function TakeawayPanel({
   session,
   takeaways,
@@ -1057,6 +1095,7 @@ function TradeLogPage() {
   const [sessions, setSessions] = useState<TradingSession[]>([]);
   const [screenshots, setScreenshots] = useState<ScreenshotAttachment[]>([]);
   const [query, setQuery] = useState('');
+  const [selectedScreenshot, setSelectedScreenshot] = useState<ScreenshotAttachment>();
 
   useEffect(() => {
     Promise.all([listTrades(), listSessions()]).then(async ([nextTrades, nextSessions]) => {
@@ -1112,7 +1151,7 @@ function TradeLogPage() {
           const session = sessionMap.get(trade.sessionId);
           const tradeScreenshots = screenshotsByTradeId.get(trade.id) ?? [];
           return (
-            <Link to={`/session/${trade.sessionId}`} className="library-row trade-log-row" key={trade.id}>
+            <article className="library-row static-row trade-log-row" key={trade.id}>
               <div className="trade-log-main">
                 <div className="trade-log-title">
                   <span className={`trade-direction ${trade.direction}`}>{trade.direction.toUpperCase()}</span>
@@ -1129,17 +1168,28 @@ function TradeLogPage() {
                 {tradeScreenshots.length > 0 && (
                   <div className="trade-log-screenshots" aria-label={`${tradeScreenshots.length} attached image(s)`}>
                     {tradeScreenshots.map((shot) => (
-                      <ScreenshotImage key={shot.id} shot={shot} />
+                      <button
+                        type="button"
+                        className="trade-log-screenshot-button"
+                        onClick={() => setSelectedScreenshot(shot)}
+                        aria-label={`Open ${shot.filename}`}
+                        key={shot.id}
+                      >
+                        <ScreenshotImage shot={shot} />
+                      </button>
                     ))}
                   </div>
                 )}
                 <time>{formatDate(trade.createdAt)}</time>
               </div>
-            </Link>
+            </article>
           );
         })}
         {filtered.length === 0 && <div className="empty-state">No trades found.</div>}
       </section>
+      {selectedScreenshot && (
+        <ScreenshotLightbox shot={selectedScreenshot} onClose={() => setSelectedScreenshot(undefined)} />
+      )}
     </main>
   );
 }
