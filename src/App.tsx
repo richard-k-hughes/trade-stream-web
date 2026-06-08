@@ -20,7 +20,7 @@ import {
   XCircle,
   Zap,
 } from 'lucide-react';
-import { ChangeEvent, ClipboardEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, ClipboardEvent, FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentType } from 'react';
 import { Link, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import {
@@ -103,6 +103,12 @@ const blockTextPresets: Record<BlockType, string[]> = {
 };
 
 const blockTypes: BlockType[] = ['zone', 'event', 'condition', 'invalidation', 'entry'];
+
+function submitFormOnEnter(event: KeyboardEvent<HTMLTextAreaElement>) {
+  if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
+  event.preventDefault();
+  event.currentTarget.form?.requestSubmit();
+}
 
 function App() {
   return (
@@ -364,13 +370,21 @@ function MarketContextEditor({
       {locked ? (
         <p className="readonly-text">{session.marketContextText || 'No market context entered.'}</p>
       ) : (
-        <textarea
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          onBlur={() => onChange({ marketContextText: text })}
-          placeholder="Premarket sold into London Low, tapped it, and rejected strongly. Watching whether pullback gives ASK bubble for long or whether price returns and closes through the level."
-          rows={4}
-        />
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            onChange({ marketContextText: text });
+          }}
+        >
+          <textarea
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            onKeyDown={submitFormOnEnter}
+            onBlur={() => onChange({ marketContextText: text })}
+            placeholder="Premarket sold into London Low, tapped it, and rejected strongly. Watching whether pullback gives ASK bubble for long or whether price returns and closes through the level."
+            rows={4}
+          />
+        </form>
       )}
     </section>
   );
@@ -589,7 +603,13 @@ function FlowBlockCard({
             setEditing(false);
           }}
         >
-          <textarea value={text} onChange={(event) => setText(event.target.value)} rows={3} autoFocus />
+          <textarea
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            onKeyDown={submitFormOnEnter}
+            rows={3}
+            autoFocus
+          />
           <div className="inline-actions">
             <button className="button primary compact" type="submit">
               Save
@@ -691,13 +711,24 @@ function AddBlockPanel({
             </button>
           ))}
         </div>
-        <textarea value={text} onChange={(event) => setText(event.target.value)} rows={3} />
+        <textarea
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          onKeyDown={submitFormOnEnter}
+          rows={3}
+        />
         <button className="button primary full" type="submit">
           <Plus size={17} /> Add to Active Path
         </button>
       </form>
 
-      <div className="branch-builder">
+      <form
+        className="branch-builder"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void handleAddBranch();
+        }}
+      >
         <div className="section-heading compact-heading">
           <h2>Add Branch Group</h2>
         </div>
@@ -747,6 +778,7 @@ function AddBlockPanel({
               aria-label={`Text for path ${index + 1}`}
               value={branch.text}
               rows={2}
+              onKeyDown={submitFormOnEnter}
               onChange={(event) =>
                 setBranches((current) =>
                   current.map((item, itemIndex) =>
@@ -777,11 +809,11 @@ function AddBlockPanel({
               <Trash2 size={15} /> Remove
             </button>
           )}
-          <button type="button" className="button secondary compact grow" onClick={handleAddBranch}>
+          <button type="submit" className="button secondary compact grow">
             <Split size={15} /> Add Branches
           </button>
         </div>
-      </div>
+      </form>
     </section>
   );
 }
@@ -875,7 +907,13 @@ function TradePanel({
               </option>
             ))}
           </select>
-          <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} placeholder="Decision notes only." />
+          <textarea
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            onKeyDown={submitFormOnEnter}
+            rows={3}
+            placeholder="Decision notes only."
+          />
           <label className="file-drop" tabIndex={0}>
             <Upload size={16} /> Screenshots
             <input
@@ -1012,7 +1050,13 @@ function TakeawayPanel({
       </div>
       {!locked && (
         <form onSubmit={handleSubmit} className="stacked-form">
-          <textarea value={text} onChange={(event) => setText(event.target.value)} rows={3} placeholder="Different-ink takeaway..." />
+          <textarea
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            onKeyDown={submitFormOnEnter}
+            rows={3}
+            placeholder="Different-ink takeaway..."
+          />
           <input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="tags optional, comma separated" />
           <button className="button gold full" type="submit">
             <Lightbulb size={17} /> Add Takeaway
