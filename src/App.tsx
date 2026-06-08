@@ -25,7 +25,6 @@ import type { ComponentType } from 'react';
 import { Link, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import {
   addBranchGroup,
-  addFlowBlock,
   addTakeaway,
   addTrade,
   createSession,
@@ -51,7 +50,6 @@ import {
   TradeOutcome,
   TradeTaken,
   TradingSession,
-  blockStatusLabels,
   blockTypeLabels,
   tradeOutcomeLabels,
   tradeOutcomeOptions,
@@ -312,7 +310,7 @@ function SessionPage() {
           )}
 
           {!locked && (
-            <AddBlockPanel
+            <BranchGroupPanel
               sessionId={bundle.session.id}
               activeParentId={activeParentId}
               onAdded={afterMutation}
@@ -412,6 +410,7 @@ function FlowDiagram({
   const blockMap = useMemo(() => new Map(blocks.map((block) => [block.id, block])), [blocks]);
   const groupMap = useMemo(() => new Map(branchGroups.map((group) => [group.id, group])), [branchGroups]);
   const rootBlocks = blocks.filter((block) => !block.parentBlockId).sort((a, b) => a.orderIndex - b.orderIndex);
+  const renderedRootGroups = new Set<string>();
 
   return (
     <section className="flow-panel">
@@ -434,20 +433,53 @@ function FlowDiagram({
         </div>
       ) : (
         <div className="tree-stack">
-          {rootBlocks.map((block) => (
-            <FlowNode
-              key={block.id}
-              block={block}
-              blockMap={blockMap}
-              groupMap={groupMap}
-              activeParentId={activeParentId}
-              locked={locked}
-              onSelectActive={onSelectActive}
-              onSelectBranch={onSelectBranch}
-              onEditBlock={onEditBlock}
-              onDeleteBlock={onDeleteBlock}
-            />
-          ))}
+          {rootBlocks.map((block) => {
+            if (block.branchGroupId) {
+              if (renderedRootGroups.has(block.branchGroupId)) return null;
+              renderedRootGroups.add(block.branchGroupId);
+              const group = groupMap.get(block.branchGroupId);
+              const branchBlocks =
+                group?.branchBlockIds.map((id) => blockMap.get(id)).filter(Boolean) ??
+                rootBlocks.filter((item) => item.branchGroupId === block.branchGroupId);
+              return (
+                <div className="branch-group root-branch-group" key={block.branchGroupId}>
+                  <div className="branch-group-label">
+                    <Split size={16} /> Possible Paths
+                  </div>
+                  <div className="branch-columns">
+                    {(branchBlocks as FlowBlock[]).map((branchBlock) => (
+                      <FlowNode
+                        key={branchBlock.id}
+                        block={branchBlock}
+                        blockMap={blockMap}
+                        groupMap={groupMap}
+                        activeParentId={activeParentId}
+                        locked={locked}
+                        onSelectActive={onSelectActive}
+                        onSelectBranch={onSelectBranch}
+                        onEditBlock={onEditBlock}
+                        onDeleteBlock={onDeleteBlock}
+                      />
+                    ))}
+                  </div>
+                </div>
+              );
+            }
+            return (
+              <FlowNode
+                key={block.id}
+                block={block}
+                blockMap={blockMap}
+                groupMap={groupMap}
+                activeParentId={activeParentId}
+                locked={locked}
+                onSelectActive={onSelectActive}
+                onSelectBranch={onSelectBranch}
+                onEditBlock={onEditBlock}
+                onDeleteBlock={onDeleteBlock}
+              />
+            );
+          })}
         </div>
       )}
     </section>
@@ -488,7 +520,6 @@ function FlowNode({
         onEdit={(text) => onEditBlock(block.id, text)}
         onDelete={() => onDeleteBlock(block.id)}
         onSelectBranch={block.branchGroupId ? () => onSelectBranch(block.branchGroupId!, block.id) : undefined}
-        branchSelected={block.branchGroupId ? groupMap.get(block.branchGroupId)?.selectedBranchId === block.id : false}
       />
       {children.length > 0 && (
         <div className="children-line">
@@ -549,7 +580,6 @@ function FlowBlockCard({
   block,
   active,
   locked,
-  branchSelected,
   onSelectActive,
   onSelectBranch,
   onEdit,
@@ -558,7 +588,6 @@ function FlowBlockCard({
   block: FlowBlock;
   active: boolean;
   locked: boolean;
-  branchSelected: boolean;
   onSelectActive: () => void;
   onSelectBranch?: () => void;
   onEdit: (text: string) => void;
@@ -571,8 +600,7 @@ function FlowBlockCard({
   useEffect(() => setText(block.text), [block.text]);
 
   const canSelectBranch = !locked && onSelectBranch && block.status === 'pending';
-  const canMakeActive = !locked && block.status !== 'inactive';
-  const showStatusLabel = Boolean(block.branchGroupId);
+  const canMakeActive = !locked && !active && block.status !== 'inactive';
 
   return (
     <article className={`flow-card type-${block.type} status-${block.status} ${active ? 'active-card' : ''}`}>
@@ -581,7 +609,11 @@ function FlowBlockCard({
           <Icon size={16} /> {blockTypeLabels[block.type]}
         </span>
         <div className="flow-card-meta">
-          {showStatusLabel && <span className="small-pill">{blockStatusLabels[block.status]}</span>}
+          {active && (
+            <span className="active-point-badge">
+              <CircleDot size={14} /> Active point
+            </span>
+          )}
           {!locked && (
             <button
               className="icon-button danger"
@@ -629,7 +661,6 @@ function FlowBlockCard({
               <CheckCircle2 size={15} /> Happened
             </button>
           )}
-          {branchSelected && <span className="selected-note">Active path</span>}
           {canMakeActive && (
             <button className="button ghost compact" onClick={onSelectActive}>
               Build here
@@ -644,7 +675,7 @@ function FlowBlockCard({
   );
 }
 
-function AddBlockPanel({
+function BranchGroupPanel({
   sessionId,
   activeParentId,
   onAdded,
@@ -653,25 +684,10 @@ function AddBlockPanel({
   activeParentId?: string;
   onAdded: (nextActive?: string) => void;
 }) {
-  const [type, setType] = useState<BlockType>('zone');
-  const [text, setText] = useState(blockTextPresets.zone[0]);
   const [branches, setBranches] = useState([
     { type: 'condition' as BlockType, text: blockTextPresets.condition[0] },
     { type: 'invalidation' as BlockType, text: blockTextPresets.invalidation[0] },
   ]);
-
-  const handleTypeChange = (next: BlockType) => {
-    setType(next);
-    setText(blockTextPresets[next][0]);
-  };
-
-  const handleAddBlock = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!text.trim()) return;
-    const block = await addFlowBlock({ sessionId, parentBlockId: activeParentId, type, text: text.trim() });
-    setText(blockTextPresets[type][0]);
-    onAdded(block.id);
-  };
 
   const handleAddBranch = async () => {
     const valid = branches.filter((branch) => branch.text.trim()).slice(0, 3);
@@ -682,46 +698,6 @@ function AddBlockPanel({
 
   return (
     <section className="tool-panel">
-      <div className="section-heading compact-heading">
-        <h2>Add Block</h2>
-      </div>
-      <form onSubmit={handleAddBlock} className="stacked-form">
-        <div className="segmented">
-          {blockTypes.map((item) => (
-            <button
-              type="button"
-              key={item}
-              className={type === item ? 'selected' : ''}
-              onClick={() => handleTypeChange(item)}
-            >
-              {blockTypeLabels[item]}
-            </button>
-          ))}
-        </div>
-        <div className="chip-wrap">
-          {blockTextPresets[type].map((preset) => (
-            <button
-              type="button"
-              className={`chip ${text === preset ? 'selected' : ''}`}
-              key={preset}
-              aria-pressed={text === preset}
-              onClick={() => setText(preset)}
-            >
-              {preset}
-            </button>
-          ))}
-        </div>
-        <textarea
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          onKeyDown={submitFormOnEnter}
-          rows={3}
-        />
-        <button className="button primary full" type="submit">
-          <Plus size={17} /> Add to Active Path
-        </button>
-      </form>
-
       <form
         className="branch-builder"
         onSubmit={(event) => {

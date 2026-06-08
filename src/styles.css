@@ -443,6 +443,10 @@ select:focus {
   align-items: start;
 }
 
+.root-branch-group > .branch-columns {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .flow-card {
   border: 2px solid #d9e2ef;
   border-radius: 8px;
@@ -453,7 +457,11 @@ select:focus {
 }
 
 .flow-card.active-card {
-  box-shadow: 0 0 0 3px rgba(35, 100, 182, 0.16);
+  border-color: #2364b6;
+  background: linear-gradient(135deg, #f5f9ff 0%, #eaf3ff 100%);
+  box-shadow:
+    0 0 0 4px rgba(35, 100, 182, 0.2),
+    0 10px 24px rgba(35, 100, 182, 0.16);
 }
 
 .flow-card-top {
@@ -469,6 +477,20 @@ select:focus {
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
+}
+
+.active-point-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  background: #2364b6;
+  color: #ffffff;
+  padding: 4px 8px;
+  font-size: 0.76rem;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
 .type-label {
@@ -491,12 +513,6 @@ select:focus {
   gap: 8px;
   margin-top: 10px;
   flex-wrap: wrap;
-}
-
-.selected-note {
-  color: #2c6f49;
-  font-size: 0.82rem;
-  font-weight: 900;
 }
 
 .type-zone {
@@ -533,8 +549,11 @@ select:focus {
 }
 
 .status-inactive {
-  background: #f4f6f8;
-  opacity: 0.62;
+  border-color: #c5cad1;
+  background: #e4e7eb;
+  box-shadow: none;
+  filter: grayscale(1);
+  opacity: 0.38;
 }
 
 .status-invalidated {
@@ -564,10 +583,6 @@ select:focus {
   display: flex;
   flex-direction: column;
   gap: 10px;
-}
-
-.branch-builder {
-  margin-top: 16px;
 }
 
 .segmented {

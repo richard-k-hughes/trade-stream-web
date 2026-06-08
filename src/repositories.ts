@@ -220,41 +220,73 @@ export async function addBranchGroup(input: {
   branches: Array<{ type: BlockType; text: string }>;
 }) {
   const timestamp = nowIso();
-  const branchGroupId = uid('branch');
-  const blocks: FlowBlock[] = input.branches.map((branch, index) => ({
-    id: uid('block'),
-    sessionId: input.sessionId,
-    parentBlockId: input.parentBlockId,
-    childBlockIds: [],
-    branchGroupId,
-    type: branch.type,
-    text: branch.text,
-    status: 'pending',
-    createdAt: timestamp,
-    orderIndex: Date.now() + index,
-  }));
-  const branchGroup: BranchGroup = {
-    id: branchGroupId,
-    sessionId: input.sessionId,
-    parentBlockId: input.parentBlockId,
-    branchBlockIds: blocks.map((block) => block.id),
-  };
+  return db.transaction('rw', db.flowBlocks, db.branchGroups, db.sessions, async () => {
+    const matchingGroups = (await db.branchGroups.where('sessionId').equals(input.sessionId).toArray()).filter(
+      (group) => (group.parentBlockId ?? undefined) === input.parentBlockId,
+    );
+    const existingGroup = matchingGroups.find((group) => group.selectedBranchId) ?? matchingGroups[0];
+    const branchGroupId = existingGroup?.id ?? uid('branch');
+    const selectedBranchId = existingGroup?.selectedBranchId;
+    const existingBranchBlockIds = Array.from(
+      new Set(matchingGroups.flatMap((group) => (Array.isArray(group.branchBlockIds) ? group.branchBlockIds : []))),
+    );
+    const blocks: FlowBlock[] = input.branches.map((branch, index) => ({
+      id: uid('block'),
+      sessionId: input.sessionId,
+      parentBlockId: input.parentBlockId,
+      childBlockIds: [],
+      branchGroupId,
+      type: branch.type,
+      text: branch.text,
+      status: selectedBranchId ? 'inactive' : 'pending',
+      createdAt: timestamp,
+      orderIndex: Date.now() + index,
+    }));
+    const branchBlockIds = [...existingBranchBlockIds, ...blocks.map((block) => block.id)];
+    const branchGroup: BranchGroup = {
+      id: branchGroupId,
+      sessionId: input.sessionId,
+      parentBlockId: input.parentBlockId,
+      branchBlockIds,
+      selectedBranchId,
+    };
 
-  await db.transaction('rw', db.flowBlocks, db.branchGroups, db.sessions, async () => {
     await db.flowBlocks.bulkAdd(blocks);
-    await db.branchGroups.add(branchGroup);
+    if (existingGroup) {
+      await Promise.all(
+        existingBranchBlockIds.map((blockId) =>
+          db.flowBlocks.update(blockId, {
+            branchGroupId,
+            ...(selectedBranchId && blockId !== selectedBranchId
+              ? { status: 'inactive' as const, selectedAt: undefined }
+              : !selectedBranchId
+                ? { status: 'pending' as const, selectedAt: undefined }
+                : {}),
+          }),
+        ),
+      );
+      await db.branchGroups.put(branchGroup);
+      await db.branchGroups.bulkDelete(
+        matchingGroups.filter((group) => group.id !== branchGroupId).map((group) => group.id),
+      );
+    } else {
+      await db.branchGroups.add(branchGroup);
+    }
     if (input.parentBlockId) {
       const parent = await db.flowBlocks.get(input.parentBlockId);
       if (parent) {
         await db.flowBlocks.update(parent.id, {
-          childBlockIds: [...parent.childBlockIds, ...blocks.map((block) => block.id)],
+          childBlockIds: [
+            ...(Array.isArray(parent.childBlockIds) ? parent.childBlockIds : []),
+            ...blocks.map((block) => block.id),
+          ],
         });
       }
     }
     await db.sessions.update(input.sessionId, { updatedAt: timestamp });
-  });
 
-  return { branchGroup, blocks };
+    return { branchGroup, blocks };
+  });
 }
 
 export async function selectBranch(branchGroupId: string, selectedBranchId: string) {
